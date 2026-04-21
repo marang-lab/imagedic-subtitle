@@ -1,0 +1,34 @@
+name: imagedic subtitle collector
+
+on:
+  # 수동 트리거 (관리자가 버튼 클릭)
+  repository_dispatch:
+    types: [collect_subtitle]
+  # 매일 새벽 3시 자동 실행 (KST 기준)
+  schedule:
+    - cron: '0 18 * * *'
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: yt-dlp 설치
+        run: pip install yt-dlp requests
+
+      - name: 자막 수집 실행
+        env:
+          SERVER_URL:       ${{ secrets.SERVER_URL }}
+          SUBTITLE_SECRET:  ${{ secrets.SUBTITLE_SECRET }}
+          YOUTUBE_URL:      ${{ github.event.client_payload.youtube_url }}
+          VIDEO_ID:         ${{ github.event.client_payload.video_id }}
+          MODE:             ${{ github.event.client_payload.mode }}
+        run: python collect_subtitle.py
