@@ -104,7 +104,15 @@ def download_subtitle(youtube_url):
     with tempfile.TemporaryDirectory() as tmpdir:
         output_template = os.path.join(tmpdir, 'sub')
 
-        # 1차: 공식 + 자동 자막 동시 시도 (en.* 패턴으로 모든 영어 자막)
+        # 쿠키 파일 생성
+        cookies_content = os.environ.get('YOUTUBE_COOKIES', '')
+        cookies_file = None
+        if cookies_content:
+            cookies_file = os.path.join(tmpdir, 'cookies.txt')
+            with open(cookies_file, 'w', encoding='utf-8') as f:
+                f.write(cookies_content)
+            print('[COOKIES] 쿠키 파일 생성 완료')
+
         cmd = [
             'yt-dlp',
             '--write-sub',
@@ -117,17 +125,20 @@ def download_subtitle(youtube_url):
             '-o', output_template,
             youtube_url
         ]
+        if cookies_file:
+            cmd += ['--cookies', cookies_file]
+
         result = subprocess.run(cmd, capture_output=True, text=True)
         print('[yt-dlp stdout]', result.stdout[-500:] if result.stdout else '')
         print('[yt-dlp stderr]', result.stderr[-500:] if result.stderr else '')
 
-        # 다운로드된 파일 목록 출력
         files = os.listdir(tmpdir)
         print('[FILES]', files)
 
-        # 파일 찾기
         srt_file = None
         for f in sorted(files):
+            if f == 'cookies.txt':
+                continue
             if any(f.endswith(ext) for ext in ['.vtt', '.srt', '.en.vtt', '.en.srt']):
                 srt_file = os.path.join(tmpdir, f)
                 print('[FOUND]', f)
