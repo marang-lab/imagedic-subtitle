@@ -28,6 +28,7 @@ jobs:
         env:
           SERVER_URL:       ${{ secrets.SERVER_URL }}
           SUBTITLE_SECRET:  ${{ secrets.SUBTITLE_SECRET }}
+          YOUTUBE_COOKIES:  ${{ secrets.YOUTUBE_COOKIES }}
           YOUTUBE_URL:      ${{ github.event.client_payload.youtube_url }}
           VIDEO_ID:         ${{ github.event.client_payload.video_id }}
           MODE:             ${{ github.event.client_payload.mode }}
