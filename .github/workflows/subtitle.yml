@@ -22,7 +22,7 @@ jobs:
           python-version: '3.11'
 
       - name: yt-dlp 설치
-        run: pip install yt-dlp requests yt-dlp-invidious
+        run: pip install yt-dlp requests
 
       - name: 자막 수집 실행
         env:
