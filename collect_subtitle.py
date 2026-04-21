@@ -19,6 +19,41 @@ VIDEO_ID        = os.environ.get('VIDEO_ID', '')
 MODE            = os.environ.get('MODE', 'single')  # single | cron
 
 
+def parse_vtt(vtt_text):
+    """VTT 텍스트 → 클립 리스트"""
+    clips = []
+    lines = vtt_text.split('\n')
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        # 타임코드 라인 찾기
+        if '-->' in line:
+            m = re.match(r'(\d{2}:\d{2}:\d{2}[\.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[\.,]\d{3})', line)
+            if m:
+                start_sec = sec_to_float(m.group(1))
+                end_sec   = sec_to_float(m.group(2))
+                # 텍스트 수집
+                text_lines = []
+                i += 1
+                while i < len(lines) and lines[i].strip():
+                    t = re.sub(r'<[^>]+>', '', lines[i].strip())
+                    if t:
+                        text_lines.append(t)
+                    i += 1
+                text = ' '.join(text_lines).strip()
+                if text and not text.startswith('WEBVTT'):
+                    clips.append({
+                        'start_sec': start_sec,
+                        'end_sec':   end_sec,
+                        'text_en':   text,
+                    })
+            else:
+                i += 1
+        else:
+            i += 1
+    return clips
+
+
 def sec_to_float(time_str):
     """SRT 타임코드 → 초 변환 (00:00:09,000 → 9.0)"""
     time_str = time_str.replace(',', '.')
@@ -69,48 +104,42 @@ def download_subtitle(youtube_url):
     with tempfile.TemporaryDirectory() as tmpdir:
         output_template = os.path.join(tmpdir, 'sub')
 
-        # 1차: 공식 영어 자막 시도
+        # 1차: 공식 + 자동 자막 동시 시도 (en.* 패턴으로 모든 영어 자막)
         cmd = [
             'yt-dlp',
             '--write-sub',
-            '--sub-lang', 'en',
-            '--sub-format', 'srt',
+            '--write-auto-sub',
+            '--sub-lang', 'en,en-US,en-GB,en.*',
+            '--sub-format', 'vtt/srt/best',
             '--skip-download',
             '--no-playlist',
+            '--no-check-certificates',
             '-o', output_template,
             youtube_url
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
+        print('[yt-dlp stdout]', result.stdout[-500:] if result.stdout else '')
+        print('[yt-dlp stderr]', result.stderr[-500:] if result.stderr else '')
 
-        # 공식 자막 없으면 자동 자막 시도
+        # 다운로드된 파일 목록 출력
+        files = os.listdir(tmpdir)
+        print('[FILES]', files)
+
+        # 파일 찾기
         srt_file = None
-        for f in os.listdir(tmpdir):
-            if f.endswith('.srt') or f.endswith('.en.srt'):
+        for f in sorted(files):
+            if any(f.endswith(ext) for ext in ['.vtt', '.srt', '.en.vtt', '.en.srt']):
                 srt_file = os.path.join(tmpdir, f)
+                print('[FOUND]', f)
                 break
-
-        if not srt_file:
-            cmd2 = [
-                'yt-dlp',
-                '--write-auto-sub',
-                '--sub-lang', 'en',
-                '--sub-format', 'srt',
-                '--skip-download',
-                '--no-playlist',
-                '-o', output_template,
-                youtube_url
-            ]
-            subprocess.run(cmd2, capture_output=True, text=True)
-            for f in os.listdir(tmpdir):
-                if f.endswith('.srt') or f.endswith('.en.srt') or 'en' in f:
-                    srt_file = os.path.join(tmpdir, f)
-                    break
 
         if not srt_file:
             return None, 'auto-generated 자막도 없음'
 
         with open(srt_file, 'r', encoding='utf-8', errors='ignore') as fp:
-            return fp.read(), None
+            content = fp.read()
+            print('[CONTENT PREVIEW]', content[:200])
+            return content, None
 
 
 def send_to_server(video_id, clips, subtitle_lang='en'):
@@ -166,7 +195,7 @@ def process_video(video_id, youtube_url):
         report_error(video_id, err or '자막 없음')
         return False
 
-    clips = parse_srt(srt_text)
+    clips = parse_vtt(srt_text) if srt_text.strip().startswith('WEBVTT') else parse_srt(srt_text)
     if not clips:
         print('[FAIL] 파싱된 클립 없음')
         report_error(video_id, '파싱된 클립 없음')
